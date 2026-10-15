@@ -1,0 +1,723 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KeyScope — LLM Key Inspector</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      /* Палитра ui-ux-pro-max: профиль "Developer Tool / IDE" */
+      --bg: #0f172a;
+      --surface: #1b2336;
+      --surface-2: #151c2d;
+      --field: #0e1526;
+      --border: #30405c;
+      --border-soft: #273349;
+      --text: #f8fafc;
+      --muted: #9fb0c9;
+      --muted-strong: #c4d0e2;
+      --accent: #22c55e;
+      --accent-strong: #34d77a;
+      --on-accent: #06260f;
+      --green: #4ade80;
+      --amber: #fbbf24;
+      --red: #f87171;
+      --radius: 12px;
+      --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      --sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.6 var(--sans);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input, select, textarea { font: inherit; }
+
+    ::selection { background: rgba(34, 197, 94, .3); }
+
+    :focus-visible {
+      outline: 2px solid var(--accent-strong);
+      outline-offset: 2px;
+      border-radius: 6px;
+    }
+
+    .wrap {
+      width: min(760px, calc(100% - 32px));
+      margin: auto;
+      padding: 44px 0 60px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      padding-bottom: 22px;
+      border-bottom: 1px solid var(--border-soft);
+      margin-bottom: 40px;
+    }
+
+    .logo {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border-radius: 11px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--accent-strong);
+      font: 700 18px/1 var(--mono);
+    }
+
+    h1 {
+      margin: 0;
+      font: 600 19px/1.2 var(--mono);
+      letter-spacing: -.3px;
+    }
+    .sub { color: var(--muted); font-size: 12.5px; }
+
+    .local {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px 11px;
+      color: var(--muted-strong);
+      font: 500 12px/1 var(--mono);
+    }
+    .local::before {
+      content: "";
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 3px rgba(34, 197, 94, .18);
+    }
+
+    .eyebrow {
+      color: var(--accent-strong);
+      font: 500 12px/1 var(--mono);
+      letter-spacing: .5px;
+    }
+
+    h2 {
+      font: 600 clamp(28px, 5.5vw, 40px)/1.14 var(--sans);
+      letter-spacing: -1px;
+      margin: 14px 0 12px;
+    }
+
+    .intro {
+      max-width: 560px;
+      margin: 0 0 28px;
+      color: var(--muted);
+      font-size: 14.5px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 16px;
+      padding: 5px;
+      background: var(--surface-2);
+      border: 1px solid var(--border-soft);
+      border-radius: 11px;
+      width: fit-content;
+    }
+    .tab {
+      min-height: 40px;
+      background: transparent;
+      border: 0;
+      color: var(--muted);
+      border-radius: 8px;
+      padding: 0 18px;
+      cursor: pointer;
+      font: 500 13px/1 var(--sans);
+      transition: color .15s, background .15s;
+    }
+    .tab:hover { color: var(--muted-strong); }
+    .tab.active { color: var(--text); background: var(--surface); box-shadow: inset 0 0 0 1px var(--border); }
+
+    .panel {
+      padding: 24px;
+      border: 1px solid var(--border-soft);
+      border-radius: 16px;
+      background: var(--surface-2);
+    }
+
+    label {
+      display: block;
+      margin-bottom: 10px;
+      color: var(--muted-strong);
+      font: 500 11px/1 var(--mono);
+      letter-spacing: .8px;
+      text-transform: uppercase;
+    }
+
+    .input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0 14px;
+      background: var(--field);
+      transition: border-color .15s;
+    }
+    .input-wrap:focus-within { border-color: var(--accent); }
+    .input-wrap > span { color: var(--muted); font-family: var(--mono); }
+
+    #key {
+      width: 100%;
+      min-width: 0;
+      min-height: 52px;
+      padding: 15px 0;
+      background: transparent;
+      border: 0;
+      color: var(--text);
+      font-family: var(--mono);
+      outline: none;
+    }
+    #key::placeholder { color: #7a8aa3; font-family: var(--sans); }
+
+    .ghost {
+      background: transparent;
+      border: 0;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 8px;
+      border-radius: 6px;
+      line-height: 1;
+    }
+    .ghost:hover { color: var(--text); }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 20px;
+    }
+
+    select {
+      width: 100%;
+      min-height: 48px;
+      padding: 0 12px;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--field);
+      outline: none;
+    }
+    select:focus { border-color: var(--accent); }
+
+    .mode-note {
+      display: flex;
+      align-items: center;
+      min-height: 48px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    textarea {
+      width: 100%;
+      resize: vertical;
+      min-height: 150px;
+      color: var(--text);
+      background: var(--field);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      outline: none;
+      font: 13px/1.6 var(--mono);
+    }
+    textarea:focus { border-color: var(--accent); }
+    textarea::placeholder { color: #7a8aa3; }
+
+    .primary {
+      width: 100%;
+      min-height: 52px;
+      margin-top: 22px;
+      border: 0;
+      border-radius: var(--radius);
+      background: var(--accent);
+      color: var(--on-accent);
+      font: 600 15px/1 var(--sans);
+      cursor: pointer;
+      transition: background .15s, transform .1s;
+    }
+    .primary:hover { background: var(--accent-strong); }
+    .primary:active { transform: translateY(1px); }
+    .primary:disabled { opacity: .55; cursor: wait; }
+
+    .hint, .foot { color: var(--muted); font-size: 12.5px; }
+    .hint { margin: 14px 0 0; }
+
+    #result { margin-top: 22px; }
+
+    .result-card {
+      padding: 22px;
+      border: 1px solid var(--border-soft);
+      border-radius: 16px;
+      background: var(--surface);
+      animation: appear .18s ease-out;
+    }
+
+    @keyframes appear {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .head { display: flex; align-items: center; gap: 13px; }
+
+    .provider-icon {
+      display: grid;
+      place-items: center;
+      flex: 0 0 44px;
+      height: 44px;
+      border-radius: 11px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--accent-strong);
+      font: 700 19px/1 var(--mono);
+    }
+
+    .provider { font: 600 16px/1.3 var(--sans); }
+    .preview { color: var(--muted); font: 400 12px/1.4 var(--mono); margin-top: 3px; }
+
+    .badge {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 11px;
+      border-radius: 8px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--muted-strong);
+      font: 500 11.5px/1 var(--mono);
+      letter-spacing: .3px;
+      white-space: nowrap;
+    }
+    .badge::before {
+      content: "";
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      flex: 0 0 auto;
+    }
+    .badge.valid { color: var(--green); background: rgba(74, 222, 128, .12); border-color: rgba(74, 222, 128, .35); }
+    .badge.rate_limited, .badge.no_credits, .badge.region_blocked,
+    .badge.unknown_provider, .badge.endpoint_unsupported, .badge.request_error {
+      color: var(--amber); background: rgba(251, 191, 36, .1); border-color: rgba(251, 191, 36, .32);
+    }
+    .badge.invalid, .badge.forbidden {
+      color: var(--red); background: rgba(248, 113, 113, .1); border-color: rgba(248, 113, 113, .32);
+    }
+
+    .message { color: var(--muted-strong); font-size: 13.5px; margin: 18px 0; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .stat {
+      min-width: 0;
+      padding: 16px;
+      border: 1px solid var(--border-soft);
+      border-radius: 12px;
+      background: var(--surface-2);
+    }
+
+    .stat-label {
+      color: var(--muted);
+      font: 500 10.5px/1 var(--mono);
+      letter-spacing: .6px;
+      text-transform: uppercase;
+    }
+
+    .stat-value {
+      margin-top: 9px;
+      font: 700 23px/1.1 var(--mono);
+      overflow-wrap: anywhere;
+    }
+
+    .stat-note { color: var(--muted); font-size: 12px; margin-top: 6px; line-height: 1.45; }
+
+    /* Массовый скан */
+    .scan-summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .pill {
+      padding: 7px 12px;
+      border-radius: 8px;
+      font: 500 12.5px/1 var(--mono);
+      background: var(--surface-2);
+      color: var(--muted-strong);
+      border: 1px solid var(--border);
+    }
+    .pill.valid { color: var(--green); background: rgba(74, 222, 128, .12); border-color: rgba(74, 222, 128, .32); }
+    .pill.bad { color: var(--red); background: rgba(248, 113, 113, .1); border-color: rgba(248, 113, 113, .3); }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      padding: 14px 16px;
+      border: 1px solid var(--border-soft);
+      border-radius: 13px;
+      background: var(--surface);
+      margin-bottom: 8px;
+    }
+    .row .r-main { min-width: 0; flex: 1; }
+    .row .r-prov { font: 600 14px/1.4 var(--sans); display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+    .row .r-prov .badge { margin-left: 0; }
+    .row .r-key { color: var(--muted); font: 400 11.5px/1.4 var(--mono); margin-top: 3px; overflow-wrap: anywhere; }
+    .row .r-bal { text-align: right; white-space: nowrap; font: 700 14px/1.3 var(--mono); }
+    .row .r-bal small { display: block; color: var(--muted); font: 400 10.5px/1.4 var(--sans); white-space: normal; max-width: 180px; margin-top: 2px; }
+
+    .foot {
+      text-align: center;
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border-soft);
+      font-family: var(--mono);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
+
+    @media (max-width: 560px) {
+      .wrap { padding-top: 28px; }
+      header { margin-bottom: 30px; }
+      .panel { padding: 17px; }
+      .grid, .stats { grid-template-columns: 1fr; }
+      .tabs { width: 100%; }
+      .tab { flex: 1; }
+      .row { flex-wrap: wrap; }
+      .row .r-bal { text-align: left; width: 100%; }
+      .row .r-bal small { max-width: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <div class="logo">&gt;_</div>
+      <div>
+        <h1>KeyScope</h1>
+        <div class="sub">Personal LLM key inspector</div>
+      </div>
+      <div class="local">Local only</div>
+    </header>
+
+    <div class="eyebrow">DEVELOPER TOOLKIT</div>
+    <h2>Проверка ключей</h2>
+    <p class="intro">
+      Определи провайдера, подтверди, что ключ активен, и узнай баланс —
+      ключ параллельно прогоняется по всем провайдерам.
+    </p>
+
+    <div class="tabs" role="tablist">
+      <button class="tab active" id="tab-single" role="tab" type="button">Один ключ</button>
+      <button class="tab" id="tab-bulk" role="tab" type="button">Список ключей</button>
+    </div>
+
+    <section class="panel" id="panel-single">
+      <form id="form">
+        <label for="key">API KEY</label>
+        <div class="input-wrap">
+          <span aria-hidden="true">$</span>
+          <input id="key" type="password" placeholder="Вставь API-ключ..."
+            autocomplete="off" autocapitalize="off" spellcheck="false"
+            required minlength="4">
+          <button class="ghost" type="button" id="toggle"
+            aria-label="Показать или скрыть ключ">◉</button>
+        </div>
+
+        <div class="grid">
+          <div>
+            <label for="provider">Провайдер</label>
+            <select id="provider">
+              <option value="auto">Автоопределение (прогон по всем)</option>
+            </select>
+          </div>
+          <div>
+            <label>Режим</label>
+            <div class="mode-note">Проверка доступа + баланс</div>
+          </div>
+        </div>
+
+        <button class="primary" id="submit" type="submit">Проверить ключ  →</button>
+        <p class="hint">
+          Ключ не сохраняется и никуда не отправляется, кроме API самого провайдера.
+        </p>
+      </form>
+    </section>
+
+    <section class="panel" id="panel-bulk" hidden>
+      <form id="bulk-form">
+        <label for="bulk-keys">Список ключей (по одному в строке)</label>
+        <textarea id="bulk-keys" rows="7" placeholder="sk-...&#10;AIza...&#10;gsk_..."
+          autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+        <button class="primary" id="bulk-submit" type="submit">Проверить все  →</button>
+        <p class="hint">
+          Каждый ключ прогоняется по всем провайдерам — можно вставить вперемешку.
+          Лимит: 200 ключей за раз.
+        </p>
+      </form>
+    </section>
+
+    <section id="result" aria-live="polite"></section>
+
+    <div class="foot">KeyScope · локальный инструмент</div>
+  </main>
+
+  <script>
+    const form = document.querySelector("#form");
+    const input = document.querySelector("#key");
+    const select = document.querySelector("#provider");
+    const button = document.querySelector("#submit");
+    const result = document.querySelector("#result");
+
+    const statusLabels = {
+      valid: "Активен",
+      invalid: "Ключ отклонён",
+      forbidden: "Нет доступа",
+      region_blocked: "Гео-блок",
+      no_credits: "Нет кредитов",
+      rate_limited: "Активен (лимит)",
+      endpoint_unsupported: "Endpoint недоступен",
+      request_error: "Ошибка запроса",
+      provider_error: "Ошибка провайдера",
+      network_error: "Ошибка сети",
+      timeout: "Тайм-аут",
+      unknown_provider: "Не определён",
+      error: "Ошибка"
+    };
+
+    const activeStatuses = new Set(["valid", "rate_limited", "no_credits", "region_blocked"]);
+
+    const icons = {
+      openai: "◈", anthropic: "✳", google: "✦",
+      openrouter: "⌘", groq: "ϟ", deepseek: "◉",
+      mistral: "M", cohere: "C", xai: "X"
+    };
+
+    // Баланс -> строка с валютой, с учётом безлимита/недоступности.
+    function balanceText(data) {
+      if (typeof data.balance === "number") {
+        const cur = data.balance_currency || "USD";
+        return (cur === "USD" ? "$" : "") + data.balance.toFixed(2) +
+               (cur === "USD" ? "" : " " + cur);
+      }
+      if (data.balance_status === "unlimited") return "Безлимит";
+      if (data.balance_status === "funds_present") return "Есть";
+      if (data.balance_status === "no_funds") return "Пусто";
+      if (data.balance_status === "unsupported") return "Нет API";
+      return "Н/Д";
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, ch => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;",
+        '"': "&quot;", "'": "&#39;"
+      })[ch]);
+    }
+
+    async function loadProviders() {
+      try {
+        const response = await fetch("/api/providers");
+        if (!response.ok) throw new Error();
+        const providers = await response.json();
+
+        for (const p of providers) {
+          const option = document.createElement("option");
+          option.value = p.id;
+          option.textContent = p.name;
+          select.appendChild(option);
+        }
+      } catch {
+        result.textContent = "Не удалось загрузить каталог провайдеров.";
+      }
+    }
+
+    function render(data) {
+      const status = data.status || "error";
+      const active = activeStatuses.has(status);
+
+      result.innerHTML = `
+        <article class="result-card">
+          <div class="head">
+            <div class="provider-icon">
+              ${escapeHtml(icons[data.provider] || "⌘")}
+            </div>
+            <div style="min-width:0">
+              <div class="provider">${escapeHtml(data.provider_name || "Результат")}</div>
+              <div class="preview">${escapeHtml(data.key_preview || "")}</div>
+            </div>
+            <div class="badge ${escapeHtml(status)}">
+              ${escapeHtml(statusLabels[status] || status)}
+            </div>
+          </div>
+          <p class="message">${escapeHtml(data.message || "")}</p>
+          <div class="stats">
+            <div class="stat">
+              <div class="stat-label">Доступный баланс</div>
+              <div class="stat-value">${escapeHtml(balanceText(data))}</div>
+              <div class="stat-note">${escapeHtml(data.balance_note || "Нет данных")}</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">Ключ активен</div>
+              <div class="stat-value" style="font-size:19px">
+                ${active ? "Да" : status === "invalid" ? "Нет" : "Неизвестно"}
+              </div>
+              <div class="stat-note">
+                ${data.models_count != null
+                  ? "Доступно моделей: " + escapeHtml(data.models_count)
+                  : "HTTP: " + escapeHtml(data.status_code ?? "—")}
+              </div>
+            </div>
+          </div>
+        </article>`;
+    }
+
+    function renderScan(payload) {
+      const results = payload.results || [];
+      const active = results.filter(r => activeStatuses.has(r.status)).length;
+      const rows = results.map(r => {
+        const st = r.status || "error";
+        const ok = activeStatuses.has(st);
+        return `
+          <div class="row">
+            <div class="provider-icon">${escapeHtml(icons[r.provider] || "⌘")}</div>
+            <div class="r-main">
+              <div class="r-prov">${escapeHtml(r.provider_name || "Не определён")}
+                <span class="badge ${escapeHtml(st)}">
+                  ${escapeHtml(statusLabels[st] || st)}</span>
+              </div>
+              <div class="r-key">${escapeHtml(r.key_preview || "")}</div>
+            </div>
+            <div class="r-bal">
+              ${ok ? escapeHtml(balanceText(r)) : "—"}
+              <small>${escapeHtml(ok ? (r.balance_note || "") : (r.message || ""))}</small>
+            </div>
+          </div>`;
+      }).join("");
+
+      result.innerHTML = `
+        <div class="scan-summary">
+          <span class="pill">Всего: ${results.length}</span>
+          <span class="pill valid">Активных: ${active}</span>
+          <span class="pill bad">Неактивных: ${results.length - active}</span>
+        </div>
+        ${rows}`;
+    }
+
+    document.querySelector("#toggle").addEventListener("click", () => {
+      input.type = input.type === "password" ? "text" : "password";
+    });
+
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+
+      const key = input.value.trim();
+      if (!key) return;
+
+      button.disabled = true;
+      button.textContent = "Проверяю...";
+      result.innerHTML = `
+        <article class="result-card">
+          <p class="message">Проверяю доступ к API...</p>
+        </article>`;
+
+      try {
+        const response = await fetch("/api/check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key, provider: select.value })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail || "Ошибка проверки.");
+        }
+        render(data);
+      } catch (error) {
+        render({
+          status: "network_error",
+          provider_name: "KeyScope",
+          message: error.message || "Не удалось связаться с сервером."
+        });
+      } finally {
+        input.value = "";
+        input.type = "password";
+        button.disabled = false;
+        button.textContent = "Проверить ключ  →";
+      }
+    });
+
+    // Вкладки: один ключ / список.
+    const tabSingle = document.querySelector("#tab-single");
+    const tabBulk = document.querySelector("#tab-bulk");
+    const panelSingle = document.querySelector("#panel-single");
+    const panelBulk = document.querySelector("#panel-bulk");
+
+    function switchTab(single) {
+      tabSingle.classList.toggle("active", single);
+      tabBulk.classList.toggle("active", !single);
+      panelSingle.hidden = !single;
+      panelBulk.hidden = single;
+      result.innerHTML = "";
+    }
+    tabSingle.addEventListener("click", () => switchTab(true));
+    tabBulk.addEventListener("click", () => switchTab(false));
+
+    // Массовая проверка.
+    const bulkForm = document.querySelector("#bulk-form");
+    const bulkKeys = document.querySelector("#bulk-keys");
+    const bulkSubmit = document.querySelector("#bulk-submit");
+
+    bulkForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      const keys = bulkKeys.value.split("\n").map(s => s.trim()).filter(Boolean);
+      if (!keys.length) return;
+
+      bulkSubmit.disabled = true;
+      bulkSubmit.textContent = `Проверяю ${keys.length}...`;
+      result.innerHTML = `<article class="result-card">
+        <p class="message">Прогоняю ${keys.length} ключ(ей) по всем провайдерам...</p></article>`;
+
+      try {
+        const response = await fetch("/api/scan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ keys })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "Ошибка проверки.");
+        renderScan(data);
+      } catch (error) {
+        result.innerHTML = `<article class="result-card">
+          <p class="message">${escapeHtml(error.message || "Не удалось связаться с сервером.")}</p>
+        </article>`;
+      } finally {
+        bulkSubmit.disabled = false;
+        bulkSubmit.textContent = "Проверить все  →";
+      }
+    });
+
+    loadProviders();
+  </script>
+</body>
+</html>
